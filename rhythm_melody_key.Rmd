@@ -1,0 +1,81 @@
+---
+title: "rhythm_melody_key"
+author: "Adam A. Bramlett"
+date: "2023-12-19"
+output: html_document
+---
+```{r}
+library(dplyr)
+library(utils)
+library(tidyr)
+library(readr)
+library(purrr)
+library(openxlsx)
+library(stringr)
+```
+pull data from original experiments for answers
+```{r}
+#read in all data from previous experiment to get answers
+#pattern= "v12_task"
+#list.files(path = file_path,pattern = pattern,full.names = TRUE)
+#data <- list.files(file_path, pattern, full.names = TRUE) %>% 
+#  map_df(~read_csv(.x) %>% mutate(across(.fns = as.character))) %>%
+#  type_convert()
+#load in rhythm and melody html from original experiment for answers
+base_path<-"/Users/adambramlett/scripts/music_project_23/"
+rhythm_file<-file.path(base_path,"experimental/build_on_gorilla/rhythm_memory/rhythm_memory.html")
+rhythmHTML <- paste(readLines(rhythm_file))
+rhythmHTML = data.frame(values=rhythmHTML)
+rhythmHTML$exp<-"rhythm"
+
+melody_file<-file.path(base_path,"/experimental/build_on_gorilla/melody_memory/melody_memory.html")
+melodyHTML <- paste(readLines(melody_file))
+melodyHTML = data.frame(values=melodyHTML)
+melodyHTML$exp<-"melody"
+```
+
+
+```{r}
+#clean HTML keys
+key<-rbind(rhythmHTML,melodyHTML)
+
+key<-key%>%
+  filter(grepl('correct_answers', values))%>%
+  filter(!grepl('var', values))%>%
+  separate_wider_delim(values, " = ", names = c("sound_stimuli_list", "corr_ans"))
+key$corr_ans <- gsub("\\[|\\]|\"|;", '',key$corr_ans)
+key$sound_stimuli_list <- gsub("\\[|\\]|correct_answers", '',key$sound_stimuli_list)
+
+key$sound_stimuli_list <- as.numeric(key$sound_stimuli_list)+1
+key<-key%>%mutate(sound_stimuli_list = paste(sound_stimuli_list,".flac",sep = ""))
+
+#melody key
+melody_key<-key%>%
+  filter(exp == "melody")%>%
+  select(!exp)%>%
+  separate_wider_delim(corr_ans,',',names = paste("screen",1:7))%>%
+  pivot_longer(cols =  !sound_stimuli_list, names_to = 'Screen.Name',names_prefix = "screen",values_to = "melody_ans")
+  
+melody_key$Screen.Name<-as.numeric(melody_key$Screen.Name)
+melody_key$melody_ans<-as.numeric(melody_key$melody_ans)
+
+#rhythm key
+rhythm_key<-key%>%
+  filter(exp == "rhythm")%>%
+  select(!exp)%>%
+  separate_wider_delim(corr_ans,',',names = paste("screen",1:13))%>%
+  pivot_longer(cols =  !sound_stimuli_list, names_to = 'Screen.Name',names_prefix = "screen",values_to = "beats_ans")
+  
+rhythm_key$Screen.Name<-as.numeric(rhythm_key$Screen.Name)
+rhythm_key$beats_ans<-as.numeric(rhythm_key$beats_ans)
+rhythm_key$timer<-(rhythm_key$Screen.Name*200)-200
+rhythm_key<-rhythm_key%>%
+  mutate(timer = if_else(Screen.Name == 1, -100,timer))%>%
+  mutate(timer_begin = if_else(Screen.Name == 1, -100,timer-200))
+
+write.csv(rhythm_key, file.path(base_path,"data","workflow_data","rhythm_key.csv"), row.names = FALSE)
+write.csv(melody_key, file.path(base_path,"data","workflow_data","melody_key.csv"), row.names = FALSE)
+
+```
+
+

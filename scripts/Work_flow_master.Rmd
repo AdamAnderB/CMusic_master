@@ -2,7 +2,9 @@
 title: "work_flow"
 author: "Adam A. Bramlett"
 date: "2023-11-03"
-output: html_document
+output: 
+  pdf_document:
+  keep_tex: true
 ---
 ```{r}
 library(dplyr)
@@ -12,8 +14,6 @@ library(readr)
 library(purrr)
 library(openxlsx)
 library(stringr)
-
-
 ```
 
 ```{r}
