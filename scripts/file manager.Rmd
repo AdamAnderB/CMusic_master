@@ -1,0 +1,120 @@
+---
+title: "file_mover_seth"
+author: "Adam A. Bramlett"
+date: "2023-10-26"
+output: html_document
+---
+
+
+```{r}
+
+getwd()
+move_files<-function(search_folder=NA,new_folder=NA,pattern=NA,sub_1=NA,main_dir=getwd()){
+      path_1<-paste(mainDir,"/",new_folder,"/",sub_1,"/",sep = "")
+      pattern_of_files_1<-pattern
+      if (is.na(main_dir)|is.na(search_folder)|is.na(new_folder)|is.na(pattern)){
+        print("main_dir, search_folder,new_folder,pattern all must be defined")
+      } else {
+        if (is.na(sub_1)){
+        path_1<-paste(mainDir,"/",new_folder,"/",sep = "")
+      } else {
+        path_1<-paste(mainDir,"/",new_folder,"/",sub_1,"/",sep = "")
+      }
+      #make files directories
+      if (!dir.exists(new_file)){
+      dir.create(file.path(new_folder_name,sub_1), recursive = TRUE)
+      } else {
+          print("folder already exists!")
+      }
+      #make list of files
+      files_to_move_1<-list.files(search_folder,pattern =pattern_of_files_1,full.names = T)
+      #copy files over
+      file.copy(from=files_to_move_1, to=path_1)
+      }
+}
+
+move_files(search_folder = "uploads",new_folder= "sing",pattern ="originalrecording")
+
+audio_segment<-list.files("/Users/adambramlett/Desktop/cmusic_data/singing/happy_bday")[1]
+audio_segment
+
+py$Ding
+Leo<- "love...vicious"
+```
+
+
+
+
+```{r}
+list.files()
+getwd()
+#setwd("cmusic_data")
+
+#variables
+#the main directory
+main_dir <- "/Users/adambramlett/Desktop/cmusic_data"
+#where you will looking for the files
+search_folder<-"uploads"
+#new folder big branch
+new_folder_name<- "Chang_ET_task_identification"
+#new folder names small branch
+sub_1<-"word_learning"
+sub_2<-"identification"
+#the patterns to look for
+pattern_of_files_1<- "yi88"
+pattern_of_files_2<- "3nnf"
+path_1<-paste(mainDir,"/",new_folder_name,"/",sub_1,"/",sep = "")
+path_2<-paste(mainDir,"/",new_folder_name,"/",sub_2,"/",sep = "")
+
+#make files
+if (!dir.exists(new_file)){
+dir.create(file.path(new_folder_name,sub_1), recursive = TRUE)
+dir.create(file.path(new_folder_name,sub_2), recursive = TRUE)
+} else {
+    print("folder already exists!")
+}
+
+files_to_move_1<-list.files(search_folder,pattern =pattern_of_files_1,full.names = T)
+files_to_move_2<-list.files(search_folder,pattern =pattern_of_files_2,full.names = T)
+
+file.copy(from=files_to_move_1, to=path_1)
+file.copy(from=files_to_move_2, to=path_2)
+```
+
+
+###
+```{r}
+list.files()
+getwd()
+#setwd("cmusic_data")
+
+#variables
+#the main directory
+main_dir <- "/Users/adambramlett/Desktop/cmusic_data"
+#where you will looking for the files
+search_folder<-"uploads"
+#new folder big branch
+new_folder_name<- "Chang_ET_task_identification"
+#new folder names small branch
+sub_1<-"word_learning"
+sub_2<-"identification"
+#the patterns to look for
+pattern_of_files_1<- "yi88"
+pattern_of_files_2<- "3nnf"
+path_1<-paste(mainDir,"/",new_folder_name,"/",sub_1,"/",sep = "")
+path_2<-paste(mainDir,"/",new_folder_name,"/",sub_2,"/",sep = "")
+
+#make files
+if (!dir.exists(new_file)){
+dir.create(file.path(new_folder_name,sub_1), recursive = TRUE)
+dir.create(file.path(new_folder_name,sub_2), recursive = TRUE)
+} else {
+    print("folder already exists!")
+}
+
+files_to_move_1<-list.files(search_folder,pattern =pattern_of_files_1,full.names = T)
+files_to_move_2<-list.files(search_folder,pattern =pattern_of_files_2,full.names = T)
+
+file.copy(from=files_to_move_1, to=path_1)
+file.copy(from=files_to_move_2, to=path_2)
+```
