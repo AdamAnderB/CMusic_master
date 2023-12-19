@@ -82,6 +82,8 @@ replace_spaces_with_dots <- function(df) {
 #make the colnames better for later
 list_o_data <- lapply(list_o_data, replace_spaces_with_dots)
 
+list_path<-file.path(master_path,"rds_folder",paste(project,"_list.rds",sep=""))
+saveRDS(list_o_data, file = list_path)
 # Create a new folder based on the project name
 csv_folder_path <- file.path(master_path, "rds_folder",paste(project,"_CSVs"))
 if (!dir.exists(csv_folder_path)){
