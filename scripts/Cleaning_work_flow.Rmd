@@ -1,0 +1,392 @@
+---
+title: "cleaning_work_flow"
+author: "Adam A. Bramlett"
+date: "2024-01-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(xml2)
+library(dplyr)
+library(readr)
+library(tidyr)
+library(tidyverse)
+library(tidyverse)
+library(ggExtra)
+library(ggridges)
+library(gghalves)
+library(psycho)
+library(GGally)
+library(corrplot)
+```
+
+```{r}
+#file management
+base_path<-"/Users/adambramlett/scripts/music_project_23"
+master_path<-"/Users/adambramlett/scripts/music_project_23/data"
+list.files(file.path(master_path,"rds_folder"))
+data_list <- readRDS(file.path(master_path,"rds_folder","data_exp_141883-v12_list.rds"))
+project<-"data_exp_141883-v12"
+version <- sub("data_exp_", "", project)
+file_path<-file.path(master_path,project)
+```
+
+```{r}
+#creating the cleaned and empty rdf
+df_list_names <- names(data_list)
+
+# Create a new list with empty dataframes
+empty_dataframes_list <- lapply(df_list_names, function(name) data.frame())
+# Set the names of the new list
+names(empty_dataframes_list) <- df_list_names
+#cleaned data
+cleaned_data_list<-empty_dataframes_list
+cleaned_data_list
+```
+
+```{r}
+#pull data
+#participant information
+participant_info<-read.csv(file.path(base_path,"data/workflow_data/participants-fall24.csv"))
+#rhythm key
+rhythm_file<-file.path(base_path,"experimental/build_on_gorilla/rhythm_memory/rhythm_memory.html")
+#rhythm_key<-read.csv(file.path(base_path,"data","workflow_data","rhythm_key.csv"))
+#melody key
+melody_file<-file.path(base_path,"experimental/build_on_gorilla/melody_memory/melody_memory.html")
+#melody_key<-read.csv(file.path(base_path,"data","workflow_data","melody_key.csv"))
+
+#rhythm data
+rhythm_data<-data_list$Rhythm_memory
+#melody data
+melody_data<-data_list$Melody_memory
+#gold smith
+gs_data<-data_list$Goldsmiths_Musical_Sophistication_Index_GoldMSI__Original_Version_English
+#music ear test
+met_data<-data_list$Musical_Ear_Test_MET__English_Instructions
+#italian data
+italian_data<-data_list$AX_Hindi_italian_Japanese_italian
+#italian data
+japanese_data<-data_list$AX_Hindi_italian_Japanese_japanese
+#mandarin data
+mandarin_data<-data_list$Mandarin_AX_Tone
+#bid data
+bird_data<-data_list$bird_learning
+#work-memory data
+working_memory<-data_list$Digit_Span__Advanced
+#background questionaire
+end_questionnaire<-data_list$End_questions
+#language questionaire
+language_questionnaire<-data_list$Language_experience_questionnaire
+```
+
+```{r}
+#cleaning HTML
+#rhythm and melody key clean up
+rhythmHTML <- paste(readLines(rhythm_file))
+rhythmHTML = data.frame(values=rhythmHTML)
+rhythmHTML$exp<-"rhythm"
+
+melodyHTML <- paste(readLines(melody_file))
+melodyHTML = data.frame(values=melodyHTML)
+melodyHTML$exp<-"melody"
+
+#clean HTML keys
+key<-rbind(rhythmHTML,melodyHTML)
+
+key<-key%>%
+  filter(grepl('correct_answers', values))%>%
+  filter(!grepl('var', values))%>%
+  separate_wider_delim(values, " = ", names = c("sound_stimuli_list", "corr_ans"))
+key$corr_ans <- gsub("\\[|\\]|\"|;", '',key$corr_ans)
+key$sound_stimuli_list <- gsub("\\[|\\]|correct_answers", '',key$sound_stimuli_list)
+
+key$sound_stimuli_list <- as.numeric(key$sound_stimuli_list)+1
+key<-key%>%mutate(sound_stimuli_list = paste(sound_stimuli_list,".flac",sep = ""))
+
+#melody key
+melody_key<-key%>%
+  filter(exp == "melody")%>%
+  select(!exp)%>%
+  separate_wider_delim(corr_ans,',',names = paste("screen",1:7))%>%
+  pivot_longer(cols =  !sound_stimuli_list, names_to = 'Screen.Name',names_prefix = "screen",values_to = "melody_ans")
+  
+melody_key$Screen.Name<-as.numeric(melody_key$Screen.Name)
+melody_key$melody_ans<-as.numeric(melody_key$melody_ans)
+
+#rhythm key
+rhythm_key<-key%>%
+  filter(exp == "rhythm")%>%
+  select(!exp)%>%
+  separate_wider_delim(corr_ans,',',names = paste("screen",1:13))%>%
+  pivot_longer(cols =  !sound_stimuli_list, names_to = 'Screen.Name',names_prefix = "screen",values_to = "beats_ans")
+  
+rhythm_key$Screen.Name<-as.numeric(rhythm_key$Screen.Name)
+rhythm_key$beats_ans<-as.numeric(rhythm_key$beats_ans)
+rhythm_key$timer<-(rhythm_key$Screen.Name*200)-200
+rhythm_key<-rhythm_key%>%
+  mutate(timer = if_else(Screen.Name == 1, -100,timer))%>%
+  mutate(timer_begin = if_else(Screen.Name == 1, -100,timer-200))
+```
+
+```{r}
+##cleaning rhythm data
+data<-rhythm_data%>%
+  select(Participant.Private.ID,display,sound_stimuli_list, UTC.Timestamp,Trial.Number,Screen.Name,Zone.Name,Zone.Type,Reaction.Time )
+
+data<-data%>%
+  filter(display == "trials_experimental")%>%
+  filter(Screen.Name != "sound play")%>%
+  mutate(beat = if_else(Zone.Type == "response_keyboard"|Zone.Type == "continue_keyboard",1,0))%>%
+  group_by(Participant.Private.ID,sound_stimuli_list,Trial.Number,Screen.Name)%>%
+  top_n(1, beat)
+
+data$Screen.Name <- as.numeric(gsub("Screen", '',data$Screen.Name))
+
+data<-data%>%
+  group_by(Trial.Number,sound_stimuli_list,Screen.Name,Participant.Private.ID)%>%
+  summarize(beats = sum(beat),time = UTC.Timestamp,rt = Reaction.Time)%>%
+  filter(Screen.Name != 14)%>%
+  mutate(double_beat = if_else(beats==2,1,0))%>%
+  mutate(beats = if_else(beats>0,1,0))%>%
+  distinct()
+
+data_rhythm_tidy<-left_join(data,rhythm_key)%>%
+  mutate(beats_correct = if_else(beats==beats_ans,1,0))
+```
+
+```{r}
+#cleaning melody data
+data<-melody_data%>%
+  select(Participant.Private.ID,display,sound_stimuli_list, UTC.Timestamp,Trial.Number,Screen.Name,Zone.Name,Zone.Type,Reaction.Time,Zone.Name,Response )
+
+data<-data%>%
+  filter(display == "trials_experimental",
+         Screen.Name != "sound play",
+         Zone.Type != "continue_button",
+         is.na(Response))%>%
+  mutate(melody_responses = as.numeric(recode(Zone.Name, one = 1,
+         two = 2,
+         three = 3,
+         four = 4,
+         Five = 5)),
+         Screen.Name = as.numeric(gsub("Screen", '',Screen.Name)))%>%
+  select(!Response)
+
+data_melody_full<-left_join(data,melody_key)
+data_melody_full<-data_melody_full%>%
+  mutate(melody_correct = if_else(melody_responses==melody_ans,1,0),
+         direction_incorrect = melody_responses-melody_ans,
+         error_type = if_else(direction_incorrect == 0, "Correct",
+                              if_else(direction_incorrect > 0, "sharp","flat")))
+```
+
+```{r}
+#clean gold smith data
+keep_list<-c("score|rating|goldmsi39")
+
+gs_data_clean<-gs_data%>%
+  select(Participant.Private.ID,Response,Question.Key)%>%
+  filter(str_detect(Question.Key, keep_list))%>%
+  mutate(most_played_instrument = if_else(Question.Key=="goldmsi39",Response,NA))%>%
+  mutate(most_played_instrument = if_else(most_played_instrument=="","none",most_played_instrument))%>%
+  fill(most_played_instrument, .direction = "up")%>%
+  filter(Question.Key!="goldmsi39")%>%
+  separate(Question.Key, into = c("question_content", "question_type"), sep = "_")%>%
+  pivot_wider(names_from = question_type,values_from =Response)%>%
+  mutate(score = as.numeric(score))%>%
+  mutate_if(is.character, as.factor)
+```
+
+```{r}
+#cleaning Musical Ear test
+remove_list<-c("Instruções|ractice|INSTRUÇÕES|Final")
+
+#clean musical ear test
+met_data_clean<-met_data%>%
+  select(Participant.Private.ID,
+         Spreadsheet.Row,Response,
+         display,
+         Spreadsheet,
+         Zone.Name,Zone.Type,
+         Response,
+         Reaction.Time,
+         Attempt,
+         Correct)%>%
+  filter(!str_detect(display, remove_list),
+         display!="",
+         Zone.Type == "response_button_text")%>%
+  mutate(Reaction.Time = as.numeric(Reaction.Time),
+         Correct = as.numeric(Correct))%>%
+  mutate_if(is.character,as.factor)
+```
+
+```{r}
+#cleaning Mandarin AX
+m_data<-mandarin_data
+#m_data tidy
+m_data<-m_data%>%
+  select(Participant.Private.ID,Spreadsheet.Row,Trial.Number,display,Sound1,Sound2,Reaction.Time,Zone.Type,Zone.Name,Response,Attempt,correct,Response.Type,Screen.Name)%>%
+  filter(Response == "m"|Response == "z")%>%
+  mutate(Answer_correct = if_else(Response == correct,1,0))%>%
+  mutate(correct_answer = correct,Spreadsheet.Name = "Mandarin")%>%
+  select(Participant.Private.ID,Spreadsheet.Row,Trial.Number,display,Sound1,Sound2,Reaction.Time,Zone.Type,Zone.Name,Response,Attempt,Answer_correct,Spreadsheet.Name,correct_answer,Screen.Name)%>%
+  filter(display=="Block")
+```
+
+```{r}
+#cleaning italian AX
+i_data<-italian_data
+i_data<-i_data%>%
+  select(Participant.Private.ID,Spreadsheet.Row,Trial.Number,display,Sound1,Sound2,Reaction.Time,Zone.Type,Zone.Name,Response,Attempt,correct_answer,Response.Type,Screen.Name,Spreadsheet.Name)%>%
+  filter(Response == "m"|Response == "z")%>%
+  mutate(Answer_correct = if_else(Response == correct_answer,1,0))%>%
+  select(Participant.Private.ID,Spreadsheet.Row,Trial.Number,display,Sound1,Sound2,Reaction.Time,Zone.Type,Zone.Name,Response,Attempt,Answer_correct,Spreadsheet.Name,correct_answer,Screen.Name)%>%
+  filter(display=="Block")
+```
+
+```{r}
+#cleaning japanese AX
+j_data<-japanese_data
+j_data<-j_data%>%
+  select(Participant.Private.ID,Spreadsheet.Row,Trial.Number,display,Sound1,Sound2,Reaction.Time,Zone.Type,Zone.Name,Response,Attempt,correct_answer,Response.Type,Screen.Name,Spreadsheet.Name)%>%
+  filter(Response == "m"|Response == "z")%>%
+  mutate(Answer_correct = if_else(Response == correct_answer,1,0))%>%
+  select(Participant.Private.ID,Spreadsheet.Row,Trial.Number,display,Sound1,Sound2,Reaction.Time,Zone.Type,Zone.Name,Response,Attempt,Answer_correct,Spreadsheet.Name,correct_answer,Screen.Name)%>%
+  filter(display=="Block")
+```
+
+```{r,warning=FALSE}
+#bird data cleaning
+feathered_friends<-bird_data%>%
+  select(Participant.Private.ID,Response,ANSWER,correct,Spreadsheet.Name,Spreadsheet.Row,Zone.Type,
+         Zone.Name,Correct,Sound_full,text1,text2,text3,text4,
+         phonation,complexity)%>%
+  filter(Zone.Type =="response_button_text")%>%
+  mutate(response_correct=if_else(correct==Response,1,0))
+```
+
+```{r}
+#work memory cleaning 
+working_mem<-working_memory%>%
+  select(Participant.Private.ID,Response,Target,Length,`Correct?`,Total.correct)%>%
+  filter(`Correct?`==1)%>%
+  group_by(Participant.Private.ID)%>%
+  mutate(Length=as.numeric(Length))%>%
+  summarize(max_working_memory=max(Length),
+         min_working_memory=min(Length),
+         mean_working_memory=mean(Length))
+```
+
+```{r}
+#end questions cleaning 
+end_quest<-end_questionnaire %>%
+  select(Participant.Private.ID,Question.Key,Response)%>%
+  filter(Question.Key == "email"|
+           Question.Key == "follow-up"|
+           Question.Key == "follow-up-quantised"|
+           Question.Key == "END QUESTIONNAIRE")%>%
+  pivot_wider(names_from =Question.Key,values_from = Response)
+```
+
+```{r}
+#language questionnaire
+lang_quest<-language_questionnaire%>%
+  select(Participant.Private.ID,Question,Object.Name,
+         Object.Number,Object.ID,Response.Type,Key,Response)%>%
+  filter(Response!="BEGIN"&Response!="END",Key != "quantised")%>%
+  mutate_all(~gsub('-', "_", .))%>%
+  mutate_all(~gsub('-', "_", .))%>%
+  mutate_all(~gsub('Mandarin Chinese', "Mandarin", .))%>%
+  mutate_all(~gsub('Chinese', "Mandarin", .))
+
+basic_background<-lang_quest%>%
+  filter(Object.Name=="age"|
+         Object.Name=="gender"|
+         Object.Name=="education"|
+         Object.Name=="mother_education"|
+         Object.Name=="father_education"|
+         Object.Name=="number_of_langs")%>%
+  select(Participant.Private.ID,Object.Name,Response)%>%
+  pivot_wider(names_from = Object.Name,values_from = Response)%>%
+  mutate_all(~gsub('c\\("__other", "', "", .))%>%
+  mutate_all(~gsub('"\\)', "", .))%>%
+  mutate_all(~gsub(' languages', "", .))%>%
+  mutate_all(~gsub(' language', "", .))%>%
+  mutate_all(~gsub('Graduate _ ', "", .))%>%
+  mutate_all(~gsub('College _ ', "", .))
+
+linguistic_background<-lang_quest%>%
+  filter(Object.Name!="age"&
+         Object.Name!="gender"&
+         Object.Name!="education"&
+         Object.Name!="mother_education"&
+         Object.Name!="father_education"&
+         Object.Name!="number_of_langs")%>%
+  select(Participant.Private.ID,Object.Name,Response)
+  
+dom_acqu<-linguistic_background%>%
+  filter(grepl("order", Object.Name, ignore.case = TRUE))%>%
+  mutate(first_char = substr(Object.Name, 1, 1),
+         rest_of_name = substr(Object.Name, 2, nchar(Object.Name)))%>%
+  group_by(Participant.Private.ID,rest_of_name) %>%
+  mutate(item_count = row_number(),
+         item=paste(rest_of_name,"_",item_count,sep = ""))%>%
+  ungroup()%>%
+  select(Participant.Private.ID, item,Response)%>%
+  pivot_wider(names_from = item, values_from=Response)
+
+dom_acqu <- dom_acqu %>%
+  rowwise() %>%
+  select(Participant.Private.ID, order(names(.)))%>%
+  mutate(list_o_all_langs = paste(c_across(2:(ncol(dom_acqu)-1)), collapse = ","))
+
+ordering_lang<-linguistic_background%>%
+  filter(!grepl("order", Object.Name, ignore.case = TRUE))%>%
+  pivot_wider(names_from = Object.Name, values_from=Response)%>%
+  mutate(language1=paste(language1,`1lang_english_check`,sep=""))%>%
+  mutate_all(~gsub('NA', "", .))
+
+
+lang_back<-basic_background%>%
+  left_join(dom_acqu)%>%
+  left_join(ordering_lang)%>%
+  mutate(monolingual=if_else(is.na(`1lang_english_check`),0,1))%>%
+  select(!`1lang_english_check`)%>%
+  mutate(first_lang_is_lang=if_else(language1 ==lang_acquisition_order_1,1,0),
+         second_lang_is_lang=if_else(language2 ==lang_acquisition_order_2,1,0),
+         first_dom_is_lang=if_else(language1 ==lang_dominance_order_1,1,0),
+         second_dom_is_lang=if_else(language2 ==lang_dominance_order_2,1,0))%>%
+  mutate(lang_acquisition_order_1=if_else(monolingual==1,language1,lang_acquisition_order_1),
+         lang_dominance_order_1=if_else(monolingual==1,language1,lang_dominance_order_1))%>%
+  mutate(lang_acquisition_order_2=if_else(monolingual==1,"none",lang_acquisition_order_2),
+         lang_dominance_order_2=if_else(monolingual==1,"none",lang_dominance_order_2))
+
+
+```
+
+```{r}
+#put the data in the clean rds
+cleaned_data_list$Goldsmiths_Musical_Sophistication_Index_GoldMSI__Original_Version_English<-gs_data_clean
+cleaned_data_list$Musical_Ear_Test_MET__English_Instructions<-met_data_clean
+cleaned_data_list$Mandarin_AX_Tone<-m_data
+cleaned_data_list$AX_Hindi_italian_Japanese_japanese<-j_data
+cleaned_data_list$AX_Hindi_italian_Japanese_italian<-i_data
+cleaned_data_list$Rhythm_memory<-data_rhythm_tidy
+cleaned_data_list$Melody_memory<-data_melody_full
+cleaned_data_list$bird_learning<-feathered_friends
+cleaned_data_list$Digit_Span__Advanced<-working_mem
+cleaned_data_list$participant_info<-participant_info
+cleaned_data_list$End_questions<-end_quest
+cleaned_data_list$Language_experience_questionnaire<-lang_back
+cleaned_data_list$bird_learning<-feathered_friends
+
+
+clean_list_path<-file.path(master_path,"rds_folder",paste(project,"_list_cleaned.rds",sep=""))
+saveRDS(cleaned_data_list, file = clean_list_path)
+```
+
+```{r}
+tester <- readRDS(file.path(master_path,"rds_folder","data_exp_141883-v12_list_cleaned.rds"))
+tester
+print(tester)
+```
