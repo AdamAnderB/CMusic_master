@@ -25,7 +25,7 @@ library(corrplot)
 base_path<-"/Users/adambramlett/scripts/music_project_23"
 master_path<-"/Users/adambramlett/scripts/music_project_23/data"
 list.files(file.path(master_path,"rds_folder"))
-data_list <- readRDS(file.path(master_path,"rds_folder","data_exp_141883-v12_list.rds"))
+data_list <- readRDS(file.path(master_path,"rds_folder","all_experiments_combined_list.rds"))
 project<-"data_exp_141883-v12"
 version <- sub("data_exp_", "", project)
 file_path<-file.path(master_path,project)
@@ -77,6 +77,7 @@ working_memory<-data_list$Digit_Span__Advanced
 end_questionnaire<-data_list$End_questions
 #language questionaire
 language_questionnaire<-data_list$Language_experience_questionnaire
+
 ```
 
 ```{r}
@@ -378,10 +379,9 @@ cleaned_data_list$Digit_Span__Advanced<-working_mem
 cleaned_data_list$participant_info<-participant_info
 cleaned_data_list$End_questions<-end_quest
 cleaned_data_list$Language_experience_questionnaire<-lang_back
-cleaned_data_list$bird_learning<-feathered_friends
 
 
-clean_list_path<-file.path(master_path,"rds_folder",paste(project,"_list_cleaned.rds",sep=""))
+clean_list_path<-file.path(master_path,"rds_folder",paste("all_experiments_combined_list","_cleaned.rds",sep=""))
 saveRDS(cleaned_data_list, file = clean_list_path)
 ```
 
@@ -389,4 +389,5 @@ saveRDS(cleaned_data_list, file = clean_list_path)
 tester <- readRDS(file.path(master_path,"rds_folder","data_exp_141883-v12_list_cleaned.rds"))
 tester
 print(tester)
+View(tester)
 ```

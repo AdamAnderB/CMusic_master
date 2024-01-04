@@ -1,0 +1,324 @@
+---
+title: "work_flow"
+author: "Adam A. Bramlett"
+date: "2023-11-03"
+output: 
+  pdf_document:
+  keep_tex: true
+---
+```{r}
+library(dplyr)
+library(utils)
+library(tidyr)
+library(readr)
+library(purrr)
+library(openxlsx)
+library(stringr)
+```
+
+```{r}
+#this folder should be the folder above where your raw data folders are stored.
+master_path<-"/Users/adambramlett/scripts/music_project_23/data"
+project<-"data_exp_142778-v3"#not needed
+pattern<- "data_exp"
+version <- sub("data_exp_", "", project)#not needed
+file_path<-file.path(master_path,project)#not needed
+files<-list.files(master_path,pattern = "data_exp_")
+files
+```
+
+```{r}
+# Use map_df to read and combine all data frames into a single data frame
+combined_df <- files %>%
+  map_df(~ file.path(master_path, .x) %>%
+           list.files(pattern = pattern, full.names = TRUE) %>%
+           map_df(~ read_csv(.x) %>% mutate(across(.fns = as.character)))
+  )
+```
+
+```{r}
+#node experiment spreadsheet clean up
+df<-combined_df
+colnames(df)<-str_replace_all(colnames(df), " " , "_")
+colnames(df)<-str_replace_all(colnames(df), "-" , "_")
+df<-unique(df%>%select(Task_Name,Tree_Node_Key,randomiser_4kvj,Spreadsheet))
+df$Tree_Node_Key<-str_replace(df$Tree_Node_Key,"task-","")
+df$Tree_Node_Key<-str_replace(df$Tree_Node_Key,"questionnaire-","")
+df<-df%>%mutate(Spreadsheet=if_else(is.na(Spreadsheet),"questionnaire",Spreadsheet))
+df_wider<-df%>%
+  na.omit()%>%
+  group_by(Task_Name,Spreadsheet)%>%
+  mutate(id=cur_group_id(),id_list=row_number())%>%
+  select(Task_Name,Spreadsheet,randomiser_4kvj,Tree_Node_Key)%>%
+  pivot_wider(names_from = randomiser_4kvj,values_from = Tree_Node_Key)%>%
+  mutate(all_nodes = paste(music_first,language_first,sep="_"))
+df_wider<-apply(df_wider,2,as.character)
+
+#make folder
+work_flow_folder_path <- file.path(master_path, "workflow_data")
+if (!dir.exists(work_flow_folder_path)) {
+  dir.create(work_flow_folder_path, showWarnings = FALSE)
+} else {
+  print("workflow_data folder already exists!")
+}
+
+name<-file.path(master_path,"workflow_data","all_exps_node_spreadhseet_key.csv")
+write.csv(df_wider,name)
+```
+
+```{r}
+#read in all behavioral data
+#the list of experiments we will use to store all the data
+list_of_experiments <- list()
+
+#loop over each folder for each experiment so we can combine the data later
+for (file in 1:length(files)){
+  #for each folder create projects
+  project <- files[file]
+  version <- sub("data_exp_", "", project)
+  
+  file_path<-file.path(master_path,project)
+  #read in files for project
+  data <- list.files(file_path, pattern, full.names = TRUE) %>% 
+    map_df(~read_csv(.x) %>% mutate(across(.fns = as.character))) %>%
+    type_convert()
+  
+  node_data<-read.csv(file.path(master_path,"workflow_data","all_exps_node_spreadhseet_key.csv"))
+  counts<-node_data%>%group_by(Task_Name)%>%count()
+  node_data<-node_data%>%left_join(counts)%>%
+    filter(Task_Name !="ambient noise")%>%
+    filter(Task_Name !="break_time_mod")%>%
+    mutate(Task_Name = str_replace_all(Task_Name, " ", "_"),
+           Task_Name = str_replace_all(Task_Name, "\\(", ""),
+           Task_Name = str_replace_all(Task_Name, "\\)", ""),
+           Task_Name = str_replace_all(Task_Name, "\\-", ""),
+           Task_Name_mod = paste(Task_Name,Spreadsheet,sep="_"),
+           Task_Name = str_replace_all(Task_Name, "\\&", ""),
+           Task_Name = str_replace_all(Task_Name, "\\:", ""),)
+  
+  #my_df_list <- node_data$Task_Name
+  list_o_data <- list()
+  
+  #make the list of all dataframes
+  for (n in 1:nrow(node_data)) {
+    if(node_data$n[n]==1){
+      tasks_name <- node_data$Task_Name[n]
+      data_nodes <- node_data %>%
+        filter(Task_Name == tasks_name)%>%
+        select(all_nodes)
+    } else {
+      tasks_name <- node_data$Task_Name_mod[n]
+      data_nodes <- node_data %>%
+        filter(Task_Name_mod == tasks_name)%>%
+        select(all_nodes)
+    }
+    nodes <- str_replace(data_nodes[1, ], "_", "|")
+    task_dat <- list.files(file_path, pattern = nodes, full.names = TRUE) %>%
+        map_df(~read_csv(.x)%>% mutate(across(.fns = as.character)))
+    list_o_data[[tasks_name]] <- task_dat
+  }
+  
+  # Access the data frames in the list using names
+  length(list_o_data)
+  #View(list_o_data)
+  list_o_data
+  
+  # Function to replace spaces with dots in column names
+  replace_spaces_with_dots <- function(df) {
+    colnames(df) <- gsub(" ", ".", colnames(df))
+    return(df)
+  }
+  #make the colnames better for later
+  list_o_data <- lapply(list_o_data, replace_spaces_with_dots)
+  
+
+  list_path<-file.path(master_path,"rds_folder",paste(project,"_list.rds",sep=""))
+  # Create a new folder based on the project name
+  rds_folder_path <- file.path(master_path, "rds_folder")
+  if (!dir.exists(rds_folder_path)) {
+    dir.create(rds_folder_path, showWarnings = FALSE)
+  } else {
+    print("RDS folder already exists!")
+  }
+  saveRDS(list_o_data, file = list_path)
+
+  csv_folder_path <- file.path(master_path, "rds_folder",paste(project,"_CSVs"))
+  if (!dir.exists(csv_folder_path)){
+    dir.create(csv_folder_path, showWarnings = FALSE)
+    } else {
+      print(paste(project, ": folder already exists!"))
+      }
+  
+  for (i in seq_along(list_o_data)) {
+    df <- list_o_data[[i]]
+    df_name <- names(list_o_data)[i]
+    file_name <- paste(paste(project, df_name,sep = "_"),"csv", sep = ".")
+    file_path <- file.path(csv_folder_path, file_name)
+    write.csv(df, file_path, row.names = FALSE)
+  }
+  saveRDS(list_o_data, file = list_path)
+  # store data frames in list_of_experiments
+  list_of_experiments[[project]] <- list_o_data
+}
+```
+
+```{r}
+#Master RDSs
+
+#combine all experiments by task the master RDS
+#Combine dataframes by task name across experiments in list_of_experiments
+combined_data_list <- list()
+
+# unique task names across all experiments
+unique_task_names <- unique(unlist(lapply(list_of_experiments, names)))
+
+#bind rows and handle missing values
+for (task_name in unique_task_names) {
+  combined_data <- bind_rows(lapply(list_of_experiments, function(experiment) {
+    if (task_name %in% names(experiment)) {
+      return(experiment[[task_name]])
+    } else {
+      # If the task name is not present in the current experiment, return an empty df
+      return(data.frame())
+    }
+  }), .id = "experiment") %>%
+    group_by(experiment) %>%
+    nest() %>%
+    mutate(data = map(data, ~bind_rows(.x) %>% 
+                        mutate(across(everything(), ~if(length(.) < max(lengths(.))) 
+                                        c(., rep(NA, max(lengths(.)) - length(.))) else .)))) %>%
+    unnest(data) %>%
+    mutate(task = task_name)
+  
+  combined_data_list[[task_name]] <- combined_data
+}
+
+#sanity checck to make sure stuff didn't go crazy
+#create an empty dataframe to store the results
+results_df <- data.frame(Task = character(), RowsMatch = logical(), RowsDifference = numeric(), ColsMatch = logical(), ColsDifference = numeric(), stringsAsFactors = FALSE)
+
+for (task in unique_task_names) {
+  exp_rows = 0
+  exp_cols = 0
+  
+  # sum of rows and columns (last column instead of sum)
+  for (experiment in list_of_experiments) {
+    exp_rows = exp_rows + nrow(experiment[[task]])
+    exp_cols = ncol(experiment[[task]])
+  }
+  
+  combined_rows = nrow(combined_data_list[[task]])
+  combined_cols = ncol(combined_data_list[[task]])
+  rows_match = exp_rows == combined_rows
+  cols_match = exp_cols == combined_cols
+  
+  # Append to dataframe
+  results_df = rbind(results_df, data.frame(Task = task, 
+                                            RowsMatch = rows_match, 
+                                            RowsDifference = ifelse(rows_match, NA, combined_rows - exp_rows),
+                                            ColsMatch = cols_match, 
+                                            ColsDifference = ifelse(cols_match, NA, combined_cols - exp_cols)))
+}
+
+#the ressults
+#View(results_df)
+
+#speerated by experiment RDS
+list_path<-file.path(master_path,"rds_folder",paste("all_experiments_seperated","_list.rds",sep=""))
+  saveRDS(list_of_experiments, file = list_path)
+  
+#combined by experiment RDS
+list_path<-file.path(master_path,"rds_folder",paste("all_experiments_combined","_list.rds",sep=""))
+  saveRDS(list_of_experiments, file = list_path)
+```
+#ET data
+```{r}
+#empty for et
+et_data_list <- list()
+
+# Read in all ET data
+for (exp in files) {
+  file_path_ET <- file.path(master_path, exp, "uploads")
+  pattern = "eyetracking_collection"
+  list_o_files <- list.files(file_path_ET, pattern, full.names = TRUE)
+
+  # Use lapply to read and process each file, then store data frames in the list
+  et_data_list <- c(et_data_list, lapply(list_o_files, function(file) {
+    lister <- read.xlsx(file)
+    lister$file_name <- file
+    lister
+  }))
+}
+
+# Combine all data frames in the list into one data frame
+et_data <- do.call(rbind, et_data_list)
+```
+
+Seperate out ET data here
+```{r}
+et_man <- et_data %>%
+  select(-"0") %>%
+  mutate(end = str_split(file_name, pattern = "k-", n = Inf, simplify = TRUE)[, 2]) %>%
+  mutate(experiment = str_extract(file_name, "(?<=data_exp_)\\d+"),
+         exp_number = str_extract(file_name, "(?<=-v)\\d+"),
+         participant = str_extract(file_name, "(?<=-)\\d+(?=-task)"),
+         node = substr(end, 1, 4)) %>%
+  select(experiment, exp_number, participant, node, -c(end, file_name), everything())
+
+
+nodes<-node_data%>%
+  select(music_first,language_first,Task_Name_mod)%>%
+  pivot_longer(cols = !Task_Name_mod,values_to = "node",names_to = "names")%>%
+  unique()
+
+et_task <- et_man %>%
+  left_join(nodes%>%select(!names))
+
+et_task_list <- split(et_task, et_task$Task_Name_mod)
+list_path<-file.path(master_path,"rds_folder",paste("all_et_data","_list.rds",sep=""))
+saveRDS(et_task_list, file = list_path)
+
+```
+
+#singing data in folders
+```{r}
+#singing files
+#create folders for moving files
+
+for (file in 1:length(files)) {
+  #for each folder create projects
+  project = files[file]
+  #variables
+  #the main directory
+  mainDir=master_path
+  #main_dir <- "/Users/adambramlett/scripts/music_project_23/data"
+  #where you will looking for the files
+  search_folder=paste(file.path(mainDir,project),"/uploads",sep="")
+  #new folder big branch
+  new_folder_name= "singing_data"
+  #new folder names small branch
+  sub_1="happy_bday"
+  sub_2="professional_singing"
+  #the patterns to look for
+  pattern_of_files_1= "Happybirthday"
+  pattern_of_files_2= "originalrecording"
+  path_1=paste(mainDir,"/",new_folder_name,"/",sub_1,"/",sep = "")
+  path_2=paste(mainDir,"/",new_folder_name,"/",sub_2,"/",sep = "")
+  new_file=file.path(mainDir,"singing")
+  
+  #make files
+  if (!dir.exists(new_file)){
+  dir.create(file.path(mainDir,new_folder_name,sub_1), recursive = TRUE)
+  dir.create(file.path(mainDir,new_folder_name,sub_2), recursive = TRUE)
+  } else {
+      print("folder already exists!")
+  }
+  
+  files_to_move_1=list.files(search_folder,pattern =pattern_of_files_1,full.names = T)
+  files_to_move_2=list.files(search_folder,pattern =pattern_of_files_2,full.names = T)
+  
+  file.copy(from=files_to_move_1, to=path_1)
+  file.copy(from=files_to_move_2, to=path_2)
+}
+```
+
