@@ -184,12 +184,12 @@ data_melody_full<-data_melody_full%>%
 ```{r}
 #clean gold smith data
 keep_list<-c("score|rating|goldmsi39")
-
 gs_data_clean<-gs_data%>%
   select(Participant.Private.ID,Response,Question.Key)%>%
   filter(str_detect(Question.Key, keep_list))%>%
-  mutate(most_played_instrument = if_else(Question.Key=="goldmsi39",Response,NA))%>%
-  mutate(most_played_instrument = if_else(most_played_instrument=="","none",most_played_instrument))%>%
+  mutate(most_played_instrument = if_else(Question.Key=="goldmsi39",Response,""))%>%
+  mutate(most_played_instrument = if_else(is.na(most_played_instrument),"none",most_played_instrument))%>%
+  mutate(most_played_instrument = if_else(Question.Key!="goldmsi39",NA,most_played_instrument))%>%
   fill(most_played_instrument, .direction = "up")%>%
   filter(Question.Key!="goldmsi39")%>%
   separate(Question.Key, into = c("question_content", "question_type"), sep = "_")%>%

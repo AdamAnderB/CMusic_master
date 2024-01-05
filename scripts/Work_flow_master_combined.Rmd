@@ -229,7 +229,7 @@ list_path<-file.path(master_path,"rds_folder",paste("all_experiments_seperated",
   
 #combined by experiment RDS
 list_path<-file.path(master_path,"rds_folder",paste("all_experiments_combined","_list.rds",sep=""))
-  saveRDS(list_of_experiments, file = list_path)
+  saveRDS(combined_data_list, file = list_path)
 ```
 #ET data
 ```{r}
